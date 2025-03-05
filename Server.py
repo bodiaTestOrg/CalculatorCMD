@@ -1,41 +1,65 @@
 from socket import *
+import pyodbc
 
 class Server:
-    def __init__(self, IP = "127.0.0.1", PORT = 4000):
+    def __init__(self, IP="127.0.0.1", PORT=4000):
         self.__IP = IP
         self.__PORT = PORT
         self.__server = socket(AF_INET, SOCK_STREAM)
         self.__server.bind((self.__IP, self.__PORT))
         self.__clientConns = []
-        self.__clientIDs = []
-        self.__currentClient = ""
 
-    def connect(self, quantity = 1):
+        self.__conn = pyodbc.connect("Driver={SQL Server};"
+                                     "Server=localhost\\SQLEXPRESS;"
+                                     "Database=calculator_db;"
+                                     "Trusted_Connection=Yes;")
+        self.__cursor = self.__conn.cursor()
+
+    def connect(self, quantity=1):
         self.__server.listen(quantity)
-        for i in range(quantity):
-            conn, addr = self.__server.accept()
-            id = conn.recv(1024).decode()
+        for _ in range(quantity):
+            conn, _ = self.__server.accept()
             self.__clientConns.append(conn)
-            self.__clientIDs.append(id)
-            self.__currentClient = id
+            self.log_action("Клиент подключился")
 
-    def send(self, message, id = 0):
-        if not id:
-            id = self.__currentClient
-        for i in range(len(self.__clientIDs)):
-            if self.__clientIDs[i] == id:
-                self.__currentClient = id
-                self.__clientConns[i].send(message.encode())
+    def send(self, message, conn):
+        self.log_action("Отправил данные на сервер")
+        conn.send(message.encode())
 
-    def receive(self, size = 1024, id = 0):
-        if not id:
-            id = self.__currentClient
-        for i in range(len(self.__clientIDs)):
-            if self.__clientIDs[i] == id:
-                self.__currentClient = id
-                return self.__clientConns[i].recv(size).decode()
+    def receive(self, conn):
+        return conn.recv(1024).decode()
+
+    def log_action(self, action):
+        self.__cursor.execute("INSERT INTO Logs (action) VALUES (?)", action)
+        self.__conn.commit()
+
+    def save_history(self, expression, result):
+        self.__cursor.execute("INSERT INTO History (expression, result) VALUES (?, ?)", expression, str(result))
+        self.__conn.commit()
+
+    def run(self):
+        self.connect()
+        conn = self.__clientConns[0]
+        while True:
+            expr = self.receive(conn)
+            if expr.lower() == "close":
+                self.log_action("Клиент отключился")
+                conn.close()
+                break
+            try:
+                result = eval(expr)
+                self.save_history(expr, result)
+                self.send(str(result), conn)
+            except Exception:
+                self.send("Ошибка", conn)
 
     def close(self):
+        self.__cursor.close()
+        self.__conn.close()
         for conn in self.__clientConns:
             conn.close()
         self.__server.close()
+
+
+server = Server()
+server.run()
