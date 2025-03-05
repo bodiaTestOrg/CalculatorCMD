@@ -1,4 +1,4 @@
-server = 'localhost\SQLEXPRESS'  
+server = 'localhost\\SQLEXPRESS'
 
 database = 'calculator_db'
 
