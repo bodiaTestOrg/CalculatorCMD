@@ -1,30 +1,37 @@
 import pyodbc
+from datetime import datetime
 
-class DbManager():
-    def __init__(self):
-        pass
+class DbManager:
+    def __init__(self, dsn):
+        self.dsn = dsn
+        self.conn = pyodbc.connect(self.dsn)
+        self.cursor = self.conn.cursor()
 
-    def saveActions(self,dsn,data):
-        conn = pyodbc.connect(dsn)
-        cursor = conn.cursor()
+    def saveActions(self, history):
+        for action in history:
+            action_time, action_expression, action_result = action
+            if action_expression == "Start of session" or action_expression == "End of session":
+                self.saveLog(action_expression, action_time)
+            else:
+                self.saveHistory(action_expression, action_result, action_time)
 
-        insertQuery = "INSERT INTO [Actions] ([time],[action]) VALUES(?,?)"
-        cursor.executemany(insertQuery,data)
+    def saveLog(self, action, action_time):
+        query = "INSERT INTO Logs (ACTION, TIME) VALUES (?, ?)"
+        self.cursor.execute(query, (action, action_time))
+        self.conn.commit()
 
-        conn.commit()
-        cursor.close()
-        conn.close()
+    def saveHistory(self, expression, result, action_time):
+        query = "INSERT INTO History (EXPRESSION, RESULT, TIME) VALUES (?, ?, ?)"
+        self.cursor.execute(query, (expression, result, action_time))
+        self.conn.commit()
 
-        return True
-    
-    def getLogs(self,dsn):
-        conn = pyodbc.connect(dsn)
-        cursor = conn.cursor()
+    def getLogs(self):
+        self.cursor.execute("SELECT * FROM Logs")
+        return self.cursor.fetchall()
 
-        cursor.execute("SELECT * FROM [Actions]")
-        rows = cursor.fetchall()
+    def getHistory(self):
+        self.cursor.execute("SELECT * FROM History")
+        return self.cursor.fetchall()
 
-        cursor.close()
-        conn.close()
-
-        return rows
+    def close(self):
+        self.conn.close()
