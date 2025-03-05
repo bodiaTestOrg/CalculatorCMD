@@ -1,19 +1,32 @@
+from fakeEnv import dsn
+from datetime import datetime
+from db_manager import DbManager
+
+
 class Calc():
     def __init__(self):
         self.history = []
 
     def calculate(self, mathString: str):
-        try:
-            result = eval(mathString)
-            self.history.append(result)
-            return result
-        except Exception:
-            return 'Ошибка'
+        result = eval(mathString)
+        self.history.append((datetime.now(), result))
+        return result
 
-calc = Calc()
 
-while True:
-    expr = input('Введите выражение (или "exit" для выхода): ')
-    if expr.lower() == 'exit':
-        break
-    print('Результат:', calc.calculate(expr))
+class extendetCalc(Calc):
+    def __init__(self):
+        super().__init__()
+        self.dsn = dsn
+        self.dbManager = DbManager()
+
+    def start(self):
+        self.history.append((datetime.now(), "Start of session"))
+        return True
+
+    def end(self):
+        self.history.append((datetime.now(), "End of session"))
+        self.dbManager.saveActions(self.dsn, self.history)
+        return True
+
+    def getLogs(self):
+        return self.dbManager.getLogs(self.dsn)
